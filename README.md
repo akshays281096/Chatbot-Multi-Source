@@ -45,14 +45,14 @@ The application features a modern, responsive frontend built with Next.js and Ta
 
 ```mermaid
 graph TD
-    User[User] --> Frontend[Frontend (Next.js)]
-    Frontend -->|HTTP/REST| Backend[Backend (FastAPI)]
-    Backend -->|Orchestration| LangGraph[LangGraph Workflow]
-    LangGraph -->|Retrieve| VectorDB[(ChromaDB)]
-    LangGraph -->|Generate| LLM[LLM Provider]
+    User[User] --> Frontend["Frontend (Next.js)"]
+    Frontend -->|HTTP/REST| Backend["Backend (FastAPI)"]
+    Backend -->|Orchestration| LangGraph["LangGraph Workflow"]
+    LangGraph -->|Retrieve| VectorDB[("ChromaDB")]
+    LangGraph -->|Generate| LLM["LLM Provider"]
     LLM --> OpenAI[OpenAI]
     LLM --> Anthropic[Anthropic]
-    LLM --> Gemini[Google Gemini]
+    LLM --> Gemini["Google Gemini"]
 ```
 
 ## Tech Stack
