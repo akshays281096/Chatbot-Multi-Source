@@ -86,7 +86,7 @@ graph TD
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/akshays281096/Chatbot-Multi-Source.git
 cd Multi-Source-Chatbot
 ```
 
