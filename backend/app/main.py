@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from app.config import settings
-from app.routers import ingestion, query, health
+from app.routers import ingestion, query, health, csv_excel
 from app.services.logger import setup_logging
 
 # Setup logging
@@ -58,6 +58,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(ingestion.router, prefix="/api", tags=["Ingestion"])
 app.include_router(query.router, prefix="/api", tags=["Query"])
+app.include_router(csv_excel.router, prefix="/api", tags=["CSV/Excel"])
 
 
 @app.exception_handler(Exception)

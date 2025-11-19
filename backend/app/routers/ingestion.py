@@ -9,6 +9,7 @@ import aiofiles
 import logging
 from app.config import settings
 from app.services.document_processor import DocumentProcessor
+from app.services.csv_excel_handler import CSVExcelHandler
 from app.services.vector_store import VectorStore
 from app.services.web_scraper import scrape_and_store
 from app.services.website_crawler import crawl_and_store_website
@@ -25,7 +26,10 @@ async def ingest_document(
     file: UploadFile = File(...),
     source_name: Optional[str] = Form(None)
 ):
-    """Ingest a document (PDF, TXT, MD, DOCX)"""
+    """Ingest a document into appropriate pipeline:
+    - PDF, TXT, MD, DOCX: RAG pipeline (chunked, vectorized, stored in DB)
+    - CSV, XLS, XLSX: CSV/Excel handler (loaded in memory, direct query)
+    """
     try:
         # Validate file type
         allowed_extensions = ['.pdf', '.txt', '.md', '.markdown', '.docx', '.csv', '.xls', '.xlsx']
@@ -46,13 +50,63 @@ async def ingest_document(
             content = await file.read()
             await f.write(content)
         
-        # Process document
+        # Check if it's a CSV/Excel file
+        is_csv_file = file_ext == '.csv'
+        is_excel_file = file_ext in ['.xls', '.xlsx']
+        
+        # Handle CSV/Excel files separately (non-RAG)
+        if is_csv_file or is_excel_file:
+            try:
+                handler = CSVExcelHandler(file_path)
+                handler.load_and_preprocess_data()
+                
+                # Store the handler in memory
+                from app.routers.csv_excel import loaded_files
+                source_key = source_name or file.filename
+                loaded_files[source_key] = handler
+                
+                # Prepare response
+                sheets = handler.list_sheets()
+                current_sheet = handler.current_sheet
+                df = handler.get_current_df()
+                
+                logger.info(f"Loaded CSV/Excel file: {file.filename}, sheets: {sheets}")
+                
+                # Clean up temporary file
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+                
+                return {
+                    "status": "success",
+                    "message": f"File '{file.filename}' loaded successfully (CSV/Excel handler)",
+                    "source_name": source_key,
+                    "file_type": handler.file_type,
+                    "sheets": sheets,
+                    "current_sheet": current_sheet,
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "data_preview": CSVExcelHandler.sanitize_for_json(df.head(5))
+                }
+                
+            except Exception as e:
+                logger.error(f"Error loading CSV/Excel file {file.filename}: {e}", exc_info=True)
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Error loading CSV/Excel file: {str(e)}"
+                )
+        
+        # Handle other file types with RAG pipeline (PDF, TXT, MD, DOCX)
         processor = DocumentProcessor()
         try:
             chunks = processor.process_file(file_path)
         except Exception as e:
             logger.error(f"Error processing file {file.filename}: {e}", exc_info=True)
-            # Clean up uploaded file
             try:
                 os.remove(file_path)
             except:
@@ -62,76 +116,28 @@ async def ingest_document(
                 detail=f"Error processing file: {str(e)}. Please check if the file is valid and not corrupted."
             )
         
-        # Get vector store early (needed for CSV/Excel dataframe storage)
+        # Get vector store for RAG documents
         vector_store: VectorStore = request.app.state.vector_store
         
-        # Determine if this is a CSV/Excel file - these need special handling
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        is_csv_file = file_ext == '.csv'
-        is_excel_file = file_ext in ['.xls', '.xlsx']
-        
-        # Process chunks
+        # Process chunks for RAG
         all_chunks = []
         all_metadatas = []
         
         for chunk in chunks:
-            if is_csv_file and 'dataframe' in chunk:
-                # For CSV files, use row-based chunking
-                logger.info(f"Using row-based chunking strategy for CSV file: {file.filename}")
-                df = chunk['dataframe']
-                
-                # Store the dataframe for data query tool
-                dataframe_key = source_name or file.filename
-                await vector_store.store_dataframe(dataframe_key, df)
-                
-                split_texts = processor.chunk_csv_by_rows(df, rows_per_chunk=20, max_chunk_size=25000)
-                
-                logger.info(f"CSV chunked into {len(split_texts)} chunks using row-based strategy")
-                
-                for idx, text in enumerate(split_texts):
-                    metadata = chunk['metadata'].copy()
-                    metadata['source'] = source_name or file.filename
-                    metadata['chunk_index'] = idx
-                    metadata['chunking_strategy'] = 'row-based'
-                    all_chunks.append(text)
-                    all_metadatas.append(metadata)
-                    
-            elif is_excel_file and 'dataframe' in chunk:
-                # For Excel files, use sheet + row-based chunking
-                logger.info(f"Using sheet + row-based chunking strategy for Excel file: {file.filename}")
-                df = chunk['dataframe']
-                sheet_name = chunk['metadata'].get('sheet_name', 'Unknown')
-                
-                # Store the dataframe for data query tool (use sheet-specific key)
-                dataframe_key = f"{source_name or file.filename}#{sheet_name}"
-                await vector_store.store_dataframe(dataframe_key, df)
-                
-                split_texts = processor.chunk_excel_by_rows(df, sheet_name=sheet_name, rows_per_chunk=20, max_chunk_size=25000)
-                
-                logger.info(f"Excel sheet '{sheet_name}' chunked into {len(split_texts)} chunks using row-based strategy")
-                
-                for idx, text in enumerate(split_texts):
-                    metadata = chunk['metadata'].copy()
-                    metadata['source'] = source_name or file.filename
-                    metadata['chunk_index'] = idx
-                    metadata['chunking_strategy'] = 'row-based'
-                    all_chunks.append(text)
-                    all_metadatas.append(metadata)
-            else:
-                # For other file types, use standard character-based chunking
-                split_texts = processor.split_text(
-                    chunk['text'],
-                    chunk_size=1000,
-                    chunk_overlap=200
-                )
-                
-                for idx, text in enumerate(split_texts):
-                    metadata = chunk['metadata'].copy()
-                    metadata['source'] = source_name or file.filename
-                    metadata['chunk_index'] = idx
-                    metadata['chunking_strategy'] = 'character-based'
-                    all_chunks.append(text)
-                    all_metadatas.append(metadata)
+            # For text-based files, use standard character-based chunking
+            split_texts = processor.split_text(
+                chunk['text'],
+                chunk_size=1000,
+                chunk_overlap=200
+            )
+            
+            for idx, text in enumerate(split_texts):
+                metadata = chunk['metadata'].copy()
+                metadata['source'] = source_name or file.filename
+                metadata['chunk_index'] = idx
+                metadata['chunking_strategy'] = 'character-based'
+                all_chunks.append(text)
+                all_metadatas.append(metadata)
         
         # Store in vector database
         ids = await vector_store.add_documents(
@@ -145,11 +151,11 @@ async def ingest_document(
         except:
             pass
         
-        logger.info(f"Ingested document: {file.filename}, {len(all_chunks)} chunks")
+        logger.info(f"Ingested RAG document: {file.filename}, {len(all_chunks)} chunks")
         
         return {
             "status": "success",
-            "message": f"Document '{file.filename}' ingested successfully",
+            "message": f"Document '{file.filename}' ingested successfully (RAG pipeline)",
             "chunks_stored": len(all_chunks),
             "ids": ids[:5]  # Return first 5 IDs as sample
         }

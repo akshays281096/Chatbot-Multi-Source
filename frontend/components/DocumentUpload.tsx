@@ -9,7 +9,7 @@ interface UploadProgress {
 
 export default function DocumentUpload() {
   const [uploading, setUploading] = useState(false)
-  const [uploadType, setUploadType] = useState<'document' | 'web' | 'json'>('document')
+  const [uploadType, setUploadType] = useState<'document' | 'web'>('document')
   const [url, setUrl] = useState('')
   const [crawlWebsite, setCrawlWebsite] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -20,9 +20,7 @@ export default function DocumentUpload() {
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
   const CHUNK_SIZE = 5 * 1024 * 1024 // 5MB chunks for large files
   
-  const allowedExtensions = uploadType === 'json' 
-    ? ['.json']
-    : ['.pdf', '.txt', '.md', '.markdown', '.docx', '.csv', '.xls', '.xlsx']
+  const allowedExtensions = ['.pdf', '.txt', '.md', '.markdown', '.docx', '.csv', '.xls', '.xlsx']
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     const fileExt = '.' + file.name.split('.').pop()?.toLowerCase()
@@ -140,9 +138,7 @@ export default function DocumentUpload() {
     setMessage(null)
 
     try {
-      const endpoint = uploadType === 'json' 
-        ? '/api/ingest/json'
-        : '/api/ingest/document'
+      const endpoint = '/api/ingest/document'
 
       // Use optimized upload with progress tracking
       const response = await uploadLargeFile(file, endpoint)
@@ -239,16 +235,6 @@ export default function DocumentUpload() {
           >
             Web Page
           </button>
-          <button
-            onClick={() => setUploadType('json')}
-            className={`px-4 py-2 rounded-lg text-sm transition ${
-              uploadType === 'json'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
-            }`}
-          >
-            JSON
-          </button>
         </div>
       </div>
 
@@ -256,14 +242,10 @@ export default function DocumentUpload() {
       {uploadType !== 'web' && (
         <div className="mb-4">
           <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            {uploadType === 'json' 
-              ? 'Upload JSON File' 
-              : 'Upload Document'}
+            Upload Document
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            {uploadType === 'json' 
-              ? 'JSON files only'
-              : 'Supported: PDF, TXT, MD, DOCX, CSV, XLS, XLSX'} (Max: {Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)
+            Supported: PDF, TXT, MD, DOCX, CSV, XLS, XLSX (Max: {Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)
           </p>
           
           {/* Drag and Drop Area */}
@@ -272,9 +254,7 @@ export default function DocumentUpload() {
               type="file"
               onChange={handleFileUpload}
               disabled={uploading}
-              accept={uploadType === 'json' 
-                ? '.json' 
-                : '.pdf,.txt,.md,.markdown,.docx,.csv,.xls,.xlsx'}
+              accept=".pdf,.txt,.md,.markdown,.docx,.csv,.xls,.xlsx"
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
             <div className="pointer-events-none text-center">

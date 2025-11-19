@@ -6,13 +6,15 @@ Based on gocustomai patterns for CSV/Excel processing
 import os
 import json
 import logging
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Tuple
 from pathlib import Path
 import PyPDF2
 from docx import Document
 import pandas as pd
 from tabulate import tabulate
 import xlrd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from app.services.ocr import extract_text_from_image
 
 logger = logging.getLogger(__name__)
@@ -160,6 +162,34 @@ class DocumentProcessor:
             raise
     
     @staticmethod
+    def count_valid(col: pd.Series) -> int:
+        """
+        Count valid (non-empty) values in a column.
+        Based on gocustomai's CSVHandler pattern
+        
+        Args:
+            col: The column to check
+            
+        Returns:
+            Count of valid values
+        """
+        return col.apply(lambda x: pd.notna(x) and str(x).strip() != '').sum()
+    
+    @staticmethod
+    def count_invalid(col: pd.Series) -> int:
+        """
+        Count invalid (empty) values in a column.
+        Based on gocustomai's CSVHandler pattern
+        
+        Args:
+            col: The column to check
+            
+        Returns:
+            Count of invalid values
+        """
+        return col.apply(lambda x: pd.isna(x) or str(x).strip() == '').sum()
+    
+    @staticmethod
     def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocess a dataframe to clean and prepare it for analysis.
@@ -178,15 +208,9 @@ class DocumentProcessor:
             return df
         
         # Remove columns where more than 50% of the values are empty
-        def count_valid(col):
-            return col.apply(lambda x: pd.notna(x) and str(x).strip() != '').sum()
-        
-        def count_invalid(col):
-            return col.apply(lambda x: pd.isna(x) or str(x).strip() == '').sum()
-        
         cols_to_keep = [
             col for col in df.columns
-            if count_valid(df[col]) > count_invalid(df[col])
+            if DocumentProcessor.count_valid(df[col]) > DocumentProcessor.count_invalid(df[col])
         ]
         
         if not cols_to_keep:
@@ -222,6 +246,88 @@ class DocumentProcessor:
         df = df[~df.apply(lambda row: all(str(row[col]).strip() == str(col).strip() for col in df.columns), axis=1)]
         
         return df
+    
+    @staticmethod
+    def calculate_sheet_relevance(query: str, df: pd.DataFrame, sheet_name: str = None) -> float:
+        """
+        Calculate the relevance of a sheet/dataframe to a query using TF-IDF.
+        Based on gocustomai's CSVHandler.calculate_sheet_relevance pattern
+        
+        Args:
+            query: The query to check relevance against
+            df: The dataframe to check
+            sheet_name: The name of the sheet (optional)
+            
+        Returns:
+            Relevance score (0-1)
+        """
+        try:
+            # Extract text from dataframe
+            headers = ' '.join(df.columns.astype(str))
+            sample_data = ' '.join(df.head(10).astype(str).values.flatten())
+            
+            # Prepare sheet name text if provided
+            sheet_name_text = ""
+            if sheet_name:
+                sheet_name_text = sheet_name.replace("_", " ").replace("-", " ")
+                # Give more weight to sheet name
+                text = (sheet_name_text + " ") * 3 + (headers + " ") * 2 + sample_data
+            else:
+                text = (headers + " ") * 2 + sample_data
+            
+            # Calculate TF-IDF similarity
+            vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
+            tfidf_matrix = vectorizer.fit_transform([text, query])
+            similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+            
+            # Boost score if query words appear in sheet name or headers
+            if sheet_name:
+                if any(word in sheet_name_text.lower() for word in query.lower().split()):
+                    similarity += 0.15
+            
+            if any(word in headers.lower() for word in query.lower().split()):
+                similarity += 0.1
+            
+            return float(similarity)
+        except Exception as e:
+            logger.warning(f"Error calculating sheet relevance: {e}")
+            return 0.0
+    
+    @staticmethod
+    def find_most_relevant_sheets(dfs_dict: Dict[str, pd.DataFrame], query: str, top_n: int = 3) -> List[str]:
+        """
+        Find the most relevant sheets for a query using TF-IDF similarity.
+        Based on gocustomai's CSVHandler.find_most_relevant_sheets pattern
+        
+        Args:
+            dfs_dict: Dictionary of {sheet_name: dataframe}
+            query: The query to find relevant sheets for
+            top_n: Number of top sheets to return
+            
+        Returns:
+            List of the most relevant sheet names
+        """
+        if len(dfs_dict) <= 1:
+            return list(dfs_dict.keys())
+        
+        try:
+            relevance_scores = {}
+            for sheet_name, df in dfs_dict.items():
+                relevance_scores[sheet_name] = DocumentProcessor.calculate_sheet_relevance(
+                    query, df, sheet_name
+                )
+            
+            # Sort by relevance score
+            sorted_sheets = sorted(
+                relevance_scores.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+            
+            return [sheet for sheet, _ in sorted_sheets[:top_n]]
+        except Exception as e:
+            logger.warning(f"Error finding most relevant sheets: {e}")
+            return list(dfs_dict.keys())
     
     @staticmethod
     def process_csv(file_path: str) -> List[Dict[str, str]]:
