@@ -10,6 +10,15 @@ interface Message {
   references?: string[]
 }
 
+interface Document {
+  id: string
+  source: string
+  source_type: string
+  rows?: number
+  columns?: number
+  sheet_name?: string
+}
+
 interface ChatInterfaceProps {
   selectedModel: {
     provider: 'OPENAI' | 'ANTHROPIC' | 'GEMINI'
@@ -23,6 +32,9 @@ export default function ChatInterface({ selectedModel, useRAG, selectedDocuments
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [selectedQueryDocument, setSelectedQueryDocument] = useState<string>('')
+  const [documentsLoading, setDocumentsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -32,6 +44,29 @@ export default function ChatInterface({ selectedModel, useRAG, selectedDocuments
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Fetch available documents
+  useEffect(() => {
+    fetchDocuments()
+    const interval = setInterval(fetchDocuments, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const fetchDocuments = async () => {
+    setDocumentsLoading(true)
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/documents`
+      )
+      setDocuments(response.data.documents || [])
+    } catch (err) {
+      // Silently handle errors
+      console.log('Could not fetch documents')
+      setDocuments([])
+    } finally {
+      setDocumentsLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,6 +82,11 @@ export default function ChatInterface({ selectedModel, useRAG, selectedDocuments
     setLoading(true)
 
     try {
+      // Use selected query document if specified, otherwise use selectedDocuments from props
+      const docsToUse = selectedQueryDocument 
+        ? [selectedQueryDocument] 
+        : (selectedDocuments && selectedDocuments.length > 0 ? selectedDocuments : null)
+
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/query`,
         {
@@ -54,7 +94,7 @@ export default function ChatInterface({ selectedModel, useRAG, selectedDocuments
           llm_provider: selectedModel.provider,
           model: selectedModel.model,
           use_rag: useRAG,
-          selected_documents: selectedDocuments && selectedDocuments.length > 0 ? selectedDocuments : null,
+          selected_documents: docsToUse,
           conversation_history: messages.map(m => ({
             role: m.role,
             content: m.content
@@ -144,7 +184,33 @@ export default function ChatInterface({ selectedModel, useRAG, selectedDocuments
       </div>
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-4">
+      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        {/* Document Selector Dropdown */}
+        {documents.length > 0 && (
+          <div className="flex items-center space-x-2">
+            <label htmlFor="document-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              📄 Query Document:
+            </label>
+            <select
+              id="document-select"
+              value={selectedQueryDocument}
+              onChange={(e) => setSelectedQueryDocument(e.target.value)}
+              disabled={documentsLoading || loading}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+            >
+              <option value="">🔄 Use all selected documents</option>
+              {documents.map((doc) => (
+                <option key={doc.id} value={doc.id}>
+                  {doc.source_type === 'csv' || doc.source_type === 'excel' ? '📊' : '📄'} {doc.source}
+                  {doc.sheet_name ? ` (${doc.sheet_name})` : ''}
+                  {doc.rows ? ` [${doc.rows} rows]` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Input Field and Send Button */}
         <div className="flex space-x-2">
           <input
             type="text"
