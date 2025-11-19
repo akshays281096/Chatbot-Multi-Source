@@ -23,7 +23,6 @@ export default function DocumentSelector({ selectedDocuments, onDocumentsChange 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null)
 
   // Fetch documents on component mount
   useEffect(() => {
@@ -48,7 +47,7 @@ export default function DocumentSelector({ selectedDocuments, onDocumentsChange 
   }
 
   const handleDeleteDocument = async (documentId: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${documentId}"? This action cannot be undone.`)) {
+    if (!window.confirm(`Delete "${documentId}"?`)) {
       return
     }
 
@@ -57,19 +56,17 @@ export default function DocumentSelector({ selectedDocuments, onDocumentsChange 
       await axios.delete(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/documents/${encodeURIComponent(documentId)}`
       )
-      
+
       // Remove from selected documents if it was selected
       if (selectedDocuments.includes(documentId)) {
         onDocumentsChange(selectedDocuments.filter(id => id !== documentId))
       }
-      
+
       // Refresh documents list
       await fetchDocuments()
-      
-      setDeleteSuccess(`"${documentId}" deleted successfully`)
-      setTimeout(() => setDeleteSuccess(null), 3000)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete document')
+      setError(err.response?.data?.detail || 'Failed to delete')
+      setTimeout(() => setError(null), 3000)
     } finally {
       setDeletingId(null)
     }
@@ -108,24 +105,10 @@ export default function DocumentSelector({ selectedDocuments, onDocumentsChange 
     return icons[sourceType.toLowerCase()] || '📎'
   }
 
-  const groupedDocuments = documents.reduce((acc, doc) => {
-    const type = doc.source_type || 'unknown'
-    if (!acc[type]) {
-      acc[type] = []
-    }
-    acc[type].push(doc)
-    return acc
-  }, {} as Record<string, Document[]>)
-
   if (documents.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-          Documents for RAG
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No documents uploaded yet. Upload documents above to use them in your queries.
-        </p>
+      <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
+        No documents yet
       </div>
     )
   }
@@ -133,117 +116,68 @@ export default function DocumentSelector({ selectedDocuments, onDocumentsChange 
   const isAllSelected = documents.length > 0 && selectedDocuments.length === documents.length
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Documents for RAG
-        </h2>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {selectedDocuments.length} of {documents.length} selected
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="select-all"
+            checked={isAllSelected}
+            onChange={handleSelectAll}
+            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <label htmlFor="select-all" className="text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+            Select All
+          </label>
+        </div>
+        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+          {selectedDocuments.length}/{documents.length}
         </span>
-      </div>
-
-      {/* Select All / Deselect All */}
-      <div className="mb-4 flex items-center space-x-2">
-        <input
-          type="checkbox"
-          id="select-all"
-          checked={isAllSelected}
-          onChange={handleSelectAll}
-          className="w-4 h-4 cursor-pointer"
-        />
-        <label htmlFor="select-all" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-          {isAllSelected ? 'Deselect All' : 'Select All'}
-        </label>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
-          <p className="text-sm text-red-600 dark:text-red-400">❌ {error}</p>
-        </div>
-      )}
-
-      {/* Success Message */}
-      {deleteSuccess && (
-        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
-          <p className="text-sm text-green-600 dark:text-green-400">✅ {deleteSuccess}</p>
+        <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
+          {error}
         </div>
       )}
 
       {/* Documents List */}
-      <div className="space-y-2 max-h-96 overflow-y-auto">
-        {Object.entries(groupedDocuments).map(([sourceType, docs]) => (
-          <div key={sourceType}>
-            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mt-3 mb-2 px-2">
-              {getSourceTypeIcon(sourceType)} {sourceType}
-            </div>
-            {docs.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+      <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className="group flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <input
+              type="checkbox"
+              id={doc.id}
+              checked={selectedDocuments.includes(doc.id)}
+              onChange={() => handleDocumentToggle(doc.id)}
+              disabled={deletingId === doc.id}
+              className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <label
+                htmlFor={doc.id}
+                className="text-xs text-gray-700 dark:text-gray-200 cursor-pointer block truncate"
+                title={doc.source}
               >
-                <input
-                  type="checkbox"
-                  id={doc.id}
-                  checked={selectedDocuments.includes(doc.id)}
-                  onChange={() => handleDocumentToggle(doc.id)}
-                  disabled={deletingId === doc.id}
-                  className="w-4 h-4 mt-0.5 cursor-pointer"
-                />
-                <div className="flex-1 min-w-0">
-                  <label
-                    htmlFor={doc.id}
-                    className="text-sm font-medium text-gray-900 dark:text-white cursor-pointer block truncate"
-                  >
-                    {doc.source}
-                  </label>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex flex-wrap gap-2">
-                    {doc.sheet_name && (
-                      <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                        Sheet: {doc.sheet_name}
-                      </span>
-                    )}
-                    {doc.rows !== undefined && (
-                      <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                        {doc.rows} rows
-                      </span>
-                    )}
-                    {doc.columns !== undefined && (
-                      <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                        {doc.columns} cols
-                      </span>
-                    )}
-                    {doc.chunking_strategy && (
-                      <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded text-xs">
-                        {doc.chunking_strategy}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDeleteDocument(doc.id)}
-                  disabled={deletingId === doc.id}
-                  title="Delete document"
-                  className="mt-0.5 p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {deletingId === doc.id ? (
-                    <span className="text-sm">⏳</span>
-                  ) : (
-                    <span className="text-sm">🗑️</span>
-                  )}
-                </button>
-              </div>
-            ))}
+                {getSourceTypeIcon(doc.source_type)} {doc.source}
+              </label>
+            </div>
+            <button
+              onClick={() => handleDeleteDocument(doc.id)}
+              disabled={deletingId === doc.id}
+              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+              title="Delete"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </div>
         ))}
-      </div>
-
-      {/* Info Text */}
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          💡 <strong>Tip:</strong> If no documents are selected, all uploaded documents will be used for RAG queries by default.
-        </p>
       </div>
     </div>
   )

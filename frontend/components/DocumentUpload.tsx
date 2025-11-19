@@ -19,12 +19,12 @@ export default function DocumentUpload() {
   // File size constants (matching Next.js patterns)
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
   const CHUNK_SIZE = 5 * 1024 * 1024 // 5MB chunks for large files
-  
+
   const allowedExtensions = ['.pdf', '.txt', '.md', '.markdown', '.docx', '.csv', '.xls', '.xlsx']
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     const fileExt = '.' + file.name.split('.').pop()?.toLowerCase()
-    
+
     if (!allowedExtensions.includes(fileExt)) {
       return {
         valid: false,
@@ -45,7 +45,7 @@ export default function DocumentUpload() {
 
   const uploadLargeFile = async (file: File, endpoint: string): Promise<any> => {
     const fileId = file.name
-    
+
     // For small files, upload directly
     if (file.size <= CHUNK_SIZE) {
       return uploadFile(file, endpoint, fileId)
@@ -146,7 +146,7 @@ export default function DocumentUpload() {
       setUploadedFiles(prev => [...prev, file.name])
       setMessage({
         type: 'success',
-        text: response.message || 'File uploaded successfully!'
+        text: 'Uploaded!'
       })
 
       // Clear progress after 2 seconds
@@ -156,11 +156,12 @@ export default function DocumentUpload() {
           delete newProgress[file.name]
           return newProgress
         })
+        setMessage(null)
       }, 2000)
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || error.message || 'Failed to upload file'
+        text: error.response?.data?.detail || error.message || 'Failed'
       })
     } finally {
       setUploading(false)
@@ -187,19 +188,16 @@ export default function DocumentUpload() {
         formData
       )
 
-      const successMessage = crawlWebsite
-        ? `Website crawled successfully! ${response.data.pages_crawled || 0} pages indexed.`
-        : response.data.message || `Web page "${response.data.title || url}" ingested successfully!`
-
       setMessage({
         type: 'success',
-        text: successMessage
+        text: 'Ingested!'
       })
       setUrl('')
+      setTimeout(() => setMessage(null), 3000)
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || 'Failed to ingest web page'
+        text: error.response?.data?.detail || 'Failed'
       })
     } finally {
       setUploading(false)
@@ -207,49 +205,33 @@ export default function DocumentUpload() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-        Upload Documents
-      </h2>
-
+    <div className="space-y-4">
       {/* Upload Type Selector */}
-      <div className="mb-4">
-        <div className="flex space-x-2 mb-4">
-          <button
-            onClick={() => setUploadType('document')}
-            className={`px-4 py-2 rounded-lg text-sm transition ${
-              uploadType === 'document'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+      <div className="flex p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
+        <button
+          onClick={() => setUploadType('document')}
+          className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${uploadType === 'document'
+              ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
-          >
-            Document
-          </button>
-          <button
-            onClick={() => setUploadType('web')}
-            className={`px-4 py-2 rounded-lg text-sm transition ${
-              uploadType === 'web'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+        >
+          File
+        </button>
+        <button
+          onClick={() => setUploadType('web')}
+          className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${uploadType === 'web'
+              ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
-          >
-            Web Page
-          </button>
-        </div>
+        >
+          Web
+        </button>
       </div>
 
       {/* File Upload */}
       {uploadType !== 'web' && (
-        <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            Upload Document
-          </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Supported: PDF, TXT, MD, DOCX, CSV, XLS, XLSX (Max: {Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)
-          </p>
-          
-          {/* Drag and Drop Area */}
-          <div className="relative border-2 border-dashed border-blue-300 rounded-lg p-8 bg-blue-50 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 transition cursor-pointer">
+        <div className="space-y-3">
+          <div className="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-800/50">
             <input
               type="file"
               onChange={handleFileUpload}
@@ -257,32 +239,31 @@ export default function DocumentUpload() {
               accept=".pdf,.txt,.md,.markdown,.docx,.csv,.xls,.xlsx"
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
-            <div className="pointer-events-none text-center">
-              <svg className="mx-auto h-12 w-12 text-blue-400 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+            <div className="text-center">
+              <svg className="mx-auto h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                 <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-8l-4-4m0 0l-4 4m4-4v12" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-                {uploading ? 'Uploading...' : 'Click to upload or drag and drop'}
+              <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {uploading ? 'Uploading...' : 'Click or drag file'}
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                or select a file to upload
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                PDF, TXT, DOCX, CSV (Max 50MB)
               </p>
             </div>
           </div>
 
-          {/* Progress bars for uploading files */}
+          {/* Progress bars */}
           {Object.keys(uploadProgress).length > 0 && (
-            <div className="mt-4 space-y-3">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Upload Progress</p>
+            <div className="space-y-2">
               {Object.entries(uploadProgress).map(([fileId, progress]) => (
-                <div key={fileId}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 truncate">{fileId}</span>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{progress}%</span>
+                <div key={fileId} className="text-xs">
+                  <div className="flex justify-between mb-1">
+                    <span className="truncate max-w-[150px]">{fileId}</span>
+                    <span>{progress}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
                     <div
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -290,80 +271,40 @@ export default function DocumentUpload() {
               ))}
             </div>
           )}
-
-          {/* List of uploaded files */}
-          {uploadedFiles.length > 0 && (
-            <div className="mt-4 bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-              <p className="text-sm font-semibold text-green-700 dark:text-green-400 mb-3">
-                ✓ Successfully Uploaded ({uploadedFiles.length})
-              </p>
-              <ul className="space-y-2">
-                {uploadedFiles.map((fileName, idx) => (
-                  <li key={idx} className="text-sm text-green-600 dark:text-green-400 flex items-center">
-                    <span className="mr-2 text-green-500">✓</span> 
-                    <span className="truncate">{fileName}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 
       {/* Web URL Input */}
       {uploadType === 'web' && (
-        <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            {crawlWebsite ? 'Website Homepage URL' : 'Web Page URL'}
-          </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            {crawlWebsite 
-              ? 'Enter homepage URL to crawl entire website (up to 50 pages, 2 levels deep)'
-              : 'Enter a single web page URL to ingest'}
-          </p>
-          
-          {/* Crawl Website Toggle */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg mb-3">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Crawl Entire Website
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Crawl multiple pages from the website
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCrawlWebsite(!crawlWebsite)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                crawlWebsite ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-              role="switch"
-              aria-checked={crawlWebsite}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  crawlWebsite ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="crawl"
+              checked={crawlWebsite}
+              onChange={(e) => setCrawlWebsite(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="crawl" className="text-xs text-gray-600 dark:text-gray-400">
+              Crawl entire site
+            </label>
           </div>
 
-          <div className="flex space-x-2">
+          <div className="flex gap-2">
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com"
-              className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              className="flex-1 px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               disabled={uploading}
             />
             <button
               onClick={handleWebIngest}
               disabled={uploading || !url.trim()}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition"
+              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {uploading ? (crawlWebsite ? 'Crawling...' : 'Ingesting...') : (crawlWebsite ? 'Crawl Website' : 'Ingest Page')}
+              Add
             </button>
           </div>
         </div>
@@ -372,20 +313,12 @@ export default function DocumentUpload() {
       {/* Status Message */}
       {message && (
         <div
-          className={`p-4 rounded-lg text-sm border ${
-            message.type === 'success'
-              ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800'
-              : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800'
-          } flex items-start gap-3`}
+          className={`p-2 rounded-md text-xs border ${message.type === 'success'
+              ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+            }`}
         >
-          <span className="text-lg flex-shrink-0">{message.type === 'success' ? '✓' : '✕'}</span>
-          <span>{message.text}</span>
-        </div>
-      )}
-
-      {uploading && (
-        <div className="mt-4 text-center">
-          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          {message.text}
         </div>
       )}
     </div>
